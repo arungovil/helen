@@ -1,19 +1,20 @@
 import MediaRemoteAdapter
 import SwiftUI
+import os
 
 @MainActor
 final class NowPlaying: ObservableObject {
   @Published var title: String = C.Defaults.title
   @Published var artist: String?
   @Published var album: String?
-  @Published var lyricsSnippet: String?
   @Published var currentLine: String?
 
   private let controller = MediaController()
   private let lyrics = LyricsService()
+  private let log = Logger(subsystem: "helen", category: "NowPlaying")
   private var lastTrackId: String?
   private var syncedLines: [LyricLine] = []
-  private var syncTimer: Timer?
+  private var syncTask: Task<Void, Never>?
   private var fetchTask: Task<Void, Never>?
   private var lastElapsed: TimeInterval = 0
   private var lastTimestamp: TimeInterval = 0
@@ -42,7 +43,6 @@ final class NowPlaying: ObservableObject {
 
       guard newTrackId != self.lastTrackId else { return }
       self.lastTrackId = newTrackId
-      self.lyricsSnippet = nil
       self.stopSync()
       self.fetchTask?.cancel()
       self.fetchTask = Task { await self.fetchLyrics() }
@@ -51,48 +51,39 @@ final class NowPlaying: ObservableObject {
 
   private func fetchLyrics() async {
     guard let artist, title != C.Defaults.title else {
-      print("[NowPlaying] Skipping lyrics — idle")
+      log.debug("Skipping lyrics — idle")
       return
     }
 
-    print("[NowPlaying] Fetching lyrics for \(title) — \(artist)")
+    log.debug("Fetching lyrics for \(self.title) — \(artist)")
 
     let fetched = await lyrics.fetchLyrics(artist: artist, title: title)
     // A newer track cancelled this fetch; don't apply its stale result.
     guard !Task.isCancelled else { return }
 
-    guard let result = fetched else {
-      print("[NowPlaying] No lyrics found")
+    guard let lines = fetched, !lines.isEmpty else {
+      log.debug("No synced lyrics")
       return
     }
 
-    lyricsSnippet = makeSnippet(from: result.plain)
-    print("[NowPlaying] Snippet (\(lyricsSnippet?.count ?? 0) chars)")
-
-    guard !result.synced.isEmpty else {
-      print("[NowPlaying] No synced lyrics")
-      return
-    }
-
-    syncedLines = result.synced
-    print("[NowPlaying] Synced: \(syncedLines.count) lines")
+    syncedLines = lines
+    log.debug("Synced: \(self.syncedLines.count) lines")
     startSync()
   }
 
   private func startSync() {
-    syncTimer = Timer.scheduledTimer(
-      withTimeInterval: C.Sync.tickInterval,
-      repeats: true
-    ) { [weak self] _ in
-      Task { @MainActor in
-        self?.tick()
+    syncTask?.cancel()
+    syncTask = Task {
+      while !Task.isCancelled {
+        tick()
+        try? await Task.sleep(for: .seconds(C.Sync.tickInterval))
       }
     }
   }
 
   private func stopSync() {
-    syncTimer?.invalidate()
-    syncTimer = nil
+    syncTask?.cancel()
+    syncTask = nil
     currentLine = nil
     syncedLines = []
   }
@@ -121,16 +112,5 @@ final class NowPlaying: ObservableObject {
 
   private func makeTrackId(from info: TrackInfo?) -> String? {
     info.map { "\($0.payload.title ?? "")-\($0.payload.artist ?? "")-\($0.payload.album ?? "")" }
-  }
-
-  private func makeSnippet(from plain: String) -> String? {
-    let lines =
-      plain
-      .components(separatedBy: .newlines)
-      .map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty }
-      .prefix(C.Lyrics.snippetLineCount)
-
-    return lines.isEmpty ? nil : lines.joined(separator: "\n")
   }
 }

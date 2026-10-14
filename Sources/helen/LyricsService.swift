@@ -1,15 +1,10 @@
 import Foundation
+import os
 
 // MARK: - Models
 
 struct LRCLIBResponse: Decodable {
-  let plainLyrics: String?  // null for instrumentals
-  let syncedLyrics: String?
-}
-
-struct LyricsResult {
-  let plain: String
-  let synced: [LyricLine]
+  let syncedLyrics: String?  // null for instrumentals and unsynced tracks
 }
 
 // MARK: - Service
@@ -17,6 +12,7 @@ struct LyricsResult {
 struct LyricsService {
   private let session: URLSession
   private let decoder = JSONDecoder()
+  private let log = Logger(subsystem: "helen", category: "LyricsService")
 
   init(session: URLSession? = nil) {
     let config = URLSessionConfiguration.default
@@ -25,29 +21,29 @@ struct LyricsService {
     self.session = session ?? URLSession(configuration: config)
   }
 
-  func fetchLyrics(artist: String, title: String) async -> LyricsResult? {
+  func fetchLyrics(artist: String, title: String) async -> [LyricLine]? {
     guard let request = makeRequest(artist: artist, title: title) else {
-      print("[LyricsService] Failed to build request")
+      log.error("Failed to build request")
       return nil
     }
 
-    print("[LyricsService] GET \(request.url?.absoluteString ?? "?")")
+    log.debug("GET \(request.url?.absoluteString ?? "?")")
 
     do {
       let (data, response) = try await session.data(for: request)
 
       guard let httpResponse = response as? HTTPURLResponse else {
-        print("[LyricsService] No HTTP response")
+        log.error("No HTTP response")
         return nil
       }
 
-      print("[LyricsService] Status: \(httpResponse.statusCode), bytes: \(data.count)")
+      log.debug("Status: \(httpResponse.statusCode), bytes: \(data.count)")
       guard httpResponse.statusCode == 200 else { return nil }
 
       let decoded = try decoder.decode(LRCLIBResponse.self, from: data)
-      return makeResult(from: decoded)
+      return decoded.syncedLyrics.map(LRCParser.parse)
     } catch {
-      print("[LyricsService] Error: \(error)")
+      log.error("Error: \(error)")
       return nil
     }
   }
@@ -66,18 +62,5 @@ struct LyricsService {
     var request = URLRequest(url: url)
     request.setValue(C.Lyrics.userAgent, forHTTPHeaderField: "User-Agent")
     return request
-  }
-
-  private func makeResult(from response: LRCLIBResponse) -> LyricsResult {
-    let plain = (response.plainLyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-    let synced: [LyricLine]
-    if let raw = response.syncedLyrics {
-      synced = LRCParser.parse(raw)
-    } else {
-      synced = []
-    }
-
-    return LyricsResult(plain: plain, synced: synced)
   }
 }

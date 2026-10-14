@@ -5,7 +5,7 @@ enum C {
     static let labelWidth: CGFloat = 200
     static let labelAlignment: Alignment = .leading
     static let dropdownWidth: CGFloat = 250
-    static let snippetLineLimit = 3
+    static let repoURL = URL(string: "https://github.com/ArunGovil/helen")!
   }
 
   enum Lyrics {
@@ -13,7 +13,6 @@ enum C {
     static let userAgent = "helen/1.0"
     static let requestTimeout: TimeInterval = 20
     static let resourceTimeout: TimeInterval = 30
-    static let snippetLineCount = 3
   }
 
   enum Sync {

@@ -37,15 +37,11 @@ private struct TrackMenu: View {
         .lineLimit(1)
     }
     Divider()
-    Button {
-      guard let url = URL(string: "https://github.com/ArunGovil/helen") else { return }
-      NSWorkspace.shared.open(url)
-    } label: {
+    Link(destination: C.Menu.repoURL) {
       Text("★ Star on GitHub")
         .font(.caption2)
         .frame(width: C.Menu.dropdownWidth, alignment: .leading)
     }
-    .buttonStyle(.plain)
     .foregroundStyle(.secondary)
   }
 }

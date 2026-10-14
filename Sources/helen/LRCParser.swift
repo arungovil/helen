@@ -12,29 +12,24 @@ struct LyricLine: Sendable {
 ///
 /// Supports `[mm:ss.xx]text` and `[mm:ss]text` formats.
 /// Lines are returned sorted by time ascending.
-struct LRCParser {
+enum LRCParser {
   static func parse(_ lrc: String) -> [LyricLine] {
-    let lines = lrc.components(separatedBy: .newlines)
-    var result: [LyricLine] = []
+    // Local, not static: Regex isn't Sendable under Swift 6.
+    let linePattern = /\[(\d+):(\d+(?:\.\d+)?)\](.*)/
 
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      guard trimmed.hasPrefix("[") else { continue }
+    return lrc
+      .components(separatedBy: .newlines)
+      .compactMap { line -> LyricLine? in
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let match = trimmed.prefixMatch(of: linePattern) else { return nil }
 
-      // Match [mm:ss.xx]text or [mm:ss]text
-      let timePattern = /\[(\d+):(\d+(?:\.\d+)?)\](.*)/
-      guard let match = try? timePattern.firstMatch(in: trimmed) else { continue }
+        let text = String(match.3).trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
 
-      let minutes = Double(match.1) ?? 0
-      let seconds = Double(match.2) ?? 0
-      let text = String(match.3).trimmingCharacters(in: .whitespaces)
-
-      guard !text.isEmpty else { continue }
-
-      let time = minutes * 60 + seconds
-      result.append(LyricLine(time: time, text: text))
-    }
-
-    return result.sorted { $0.time < $1.time }
+        let minutes = Double(match.1) ?? 0
+        let seconds = Double(match.2) ?? 0
+        return LyricLine(time: minutes * 60 + seconds, text: text)
+      }
+      .sorted { $0.time < $1.time }
   }
 }
