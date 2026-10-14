@@ -13,6 +13,7 @@ final class NowPlaying: ObservableObject {
   private let lyrics = LyricsService()
   private let log = Logger(subsystem: "helen", category: "NowPlaying")
   private var lastTrackId: String?
+  private var duration: TimeInterval?
   private var syncedLines: [LyricLine] = []
   private var syncTask: Task<Void, Never>?
   private var fetchTask: Task<Void, Never>?
@@ -32,6 +33,7 @@ final class NowPlaying: ObservableObject {
     let newTitle = info?.payload.title ?? C.Defaults.title
     let newArtist = info?.payload.artist
     let newAlbum = info?.payload.album
+    let newDuration = info?.payload.durationMicros.map { $0 / 1_000_000 }
 
     syncPlaybackState(from: info?.payload)
     let newTrackId = makeTrackId(from: info)
@@ -40,6 +42,7 @@ final class NowPlaying: ObservableObject {
       self.title = newTitle
       self.artist = newArtist
       self.album = newAlbum
+      self.duration = newDuration
 
       guard newTrackId != self.lastTrackId else { return }
       self.lastTrackId = newTrackId
@@ -57,7 +60,7 @@ final class NowPlaying: ObservableObject {
 
     log.debug("Fetching lyrics for \(self.title) — \(artist)")
 
-    let fetched = await lyrics.fetchLyrics(artist: artist, title: title)
+    let fetched = await lyrics.fetchLyrics(artist: artist, title: title, duration: duration)
     // A newer track cancelled this fetch; don't apply its stale result.
     guard !Task.isCancelled else { return }
 
@@ -105,7 +108,7 @@ final class NowPlaying: ObservableObject {
   private func syncPlaybackState(from payload: TrackInfo.Payload?) {
     guard let p = payload else { return }
     lastElapsed = (p.elapsedTimeMicros ?? 0) / 1_000_000
-    lastTimestamp = (p.timestampEpochMicros ?? Date().timeIntervalSince1970) / 1_000_000
+    lastTimestamp = p.timestampEpochMicros.map { $0 / 1_000_000 } ?? Date().timeIntervalSince1970
     playbackRate = p.playbackRate ?? C.Defaults.playbackRate
     isPlaying = p.isPlaying ?? false
   }

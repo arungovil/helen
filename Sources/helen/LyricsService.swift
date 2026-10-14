@@ -21,46 +21,76 @@ struct LyricsService {
     self.session = session ?? URLSession(configuration: config)
   }
 
-  func fetchLyrics(artist: String, title: String) async -> [LyricLine]? {
-    guard let request = makeRequest(artist: artist, title: title) else {
-      log.error("Failed to build request")
-      return nil
-    }
-
-    log.debug("GET \(request.url?.absoluteString ?? "?")")
+  /// Tries the exact title with duration, then a cleaned title, then the exact title without
+  /// duration. lrclib 404s on a duration mismatch, so the last attempt trades timing accuracy
+  /// (it may return another edit of the song) for a hit.
+  func fetchLyrics(artist: String, title: String, duration: TimeInterval?) async -> [LyricLine]? {
+    let title = Self.stripRemaster(title)
+    let cleaned = Self.cleanTitle(title)
+    var attempts: [(title: String, duration: TimeInterval?)] = [(title, duration)]
+    if cleaned != title { attempts.append((cleaned, duration)) }
+    if duration != nil { attempts.append((title, nil)) }
 
     do {
-      let (data, response) = try await session.data(for: request)
-
-      guard let httpResponse = response as? HTTPURLResponse else {
-        log.error("No HTTP response")
-        return nil
+      for attempt in attempts {
+        if let lines = try await get(
+          artist: artist, title: attempt.title, duration: attempt.duration)
+        {
+          return lines
+        }
       }
-
-      log.debug("Status: \(httpResponse.statusCode), bytes: \(data.count)")
-      guard httpResponse.statusCode == 200 else { return nil }
-
-      let decoded = try decoder.decode(LRCLIBResponse.self, from: data)
-      return decoded.syncedLyrics.map(LRCParser.parse)
     } catch {
       log.error("Error: \(error)")
-      return nil
     }
+    return nil
+  }
+
+  /// Drops remaster tags: "Song (Remastered 2011)", "Song [2011 Remaster]", "Song - Remastered".
+  static func stripRemaster(_ title: String) -> String {
+    title
+      .replacing(/\s*[\(\[][^\)\]]*remaster[^\)\]]*[\)\]]/.ignoresCase(), with: "")
+      .replacing(/\s+-\s+[^-]*remaster.*$/.ignoresCase(), with: "")
+      .trimmingCharacters(in: .whitespaces)
+  }
+
+  /// Strips bracketed groups and a trailing " - suffix", e.g. "Song (feat. X) - Remastered" → "Song".
+  static func cleanTitle(_ title: String) -> String {
+    let cleaned =
+      title
+      .replacing(/\s*[\(\[][^\)\]]*[\)\]]/, with: "")
+      .replacing(/\s+-\s+.*$/, with: "")
+      .trimmingCharacters(in: .whitespaces)
+    return cleaned.isEmpty ? title : cleaned
   }
 
   // MARK: - Helpers
 
-  private func makeRequest(artist: String, title: String) -> URLRequest? {
+  /// Returns nil on a 404 (no match); throws on transport or other HTTP errors.
+  private func get(artist: String, title: String, duration: TimeInterval?) async throws
+    -> [LyricLine]?
+  {
     var components = URLComponents(string: C.Lyrics.baseURL)
     components?.queryItems = [
       URLQueryItem(name: "artist_name", value: artist),
       URLQueryItem(name: "track_name", value: title),
     ]
-
-    guard let url = components?.url else { return nil }
+    if let duration {
+      components?.queryItems?.append(
+        URLQueryItem(name: "duration", value: String(Int(duration.rounded()))))
+    }
+    guard let url = components?.url else { throw URLError(.badURL) }
 
     var request = URLRequest(url: url)
     request.setValue(C.Lyrics.userAgent, forHTTPHeaderField: "User-Agent")
-    return request
+    log.debug("GET \(url.absoluteString)")
+
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+
+    log.debug("Status: \(http.statusCode), bytes: \(data.count)")
+    guard http.statusCode != 404 else { return nil }
+    guard http.statusCode == 200 else { throw URLError(.badServerResponse) }
+
+    return try decoder.decode(LRCLIBResponse.self, from: data).syncedLyrics.map(LRCParser.parse)
   }
 }
