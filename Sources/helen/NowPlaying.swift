@@ -14,6 +14,7 @@ final class NowPlaying: ObservableObject {
   private var lastTrackId: String?
   private var syncedLines: [LyricLine] = []
   private var syncTimer: Timer?
+  private var fetchTask: Task<Void, Never>?
   private var lastElapsed: TimeInterval = 0
   private var lastTimestamp: TimeInterval = 0
   private var playbackRate: Double = C.Defaults.playbackRate
@@ -43,7 +44,8 @@ final class NowPlaying: ObservableObject {
       self.lastTrackId = newTrackId
       self.lyricsSnippet = nil
       self.stopSync()
-      await self.fetchLyrics()
+      self.fetchTask?.cancel()
+      self.fetchTask = Task { await self.fetchLyrics() }
     }
   }
 
@@ -55,7 +57,11 @@ final class NowPlaying: ObservableObject {
 
     print("[NowPlaying] Fetching lyrics for \(title) — \(artist)")
 
-    guard let result = await lyrics.fetchLyrics(artist: artist, title: title) else {
+    let fetched = await lyrics.fetchLyrics(artist: artist, title: title)
+    // A newer track cancelled this fetch; don't apply its stale result.
+    guard !Task.isCancelled else { return }
+
+    guard let result = fetched else {
       print("[NowPlaying] No lyrics found")
       return
     }
@@ -118,7 +124,8 @@ final class NowPlaying: ObservableObject {
   }
 
   private func makeSnippet(from plain: String) -> String? {
-    let lines = plain
+    let lines =
+      plain
       .components(separatedBy: .newlines)
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }

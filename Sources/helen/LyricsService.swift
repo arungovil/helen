@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Models
 
 struct LRCLIBResponse: Decodable {
-  let plainLyrics: String
+  let plainLyrics: String?  // null for instrumentals
   let syncedLyrics: String?
 }
 
@@ -69,7 +69,7 @@ struct LyricsService {
   }
 
   private func makeResult(from response: LRCLIBResponse) -> LyricsResult {
-    let plain = response.plainLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
+    let plain = (response.plainLyrics ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
     let synced: [LyricLine]
     if let raw = response.syncedLyrics {
