@@ -39,13 +39,13 @@ private struct TrackMenu: View {
       .frame(width: C.Menu.dropdownWidth, alignment: .leading)
       .lineLimit(1)
 
-    if let artist = nowPlaying.artist {
+    if let artist = nowPlaying.artist, !artist.isEmpty {
       Text("👤 \(artist)")
         .foregroundStyle(.secondary)
         .frame(width: C.Menu.dropdownWidth, alignment: .leading)
         .lineLimit(1)
     }
-    if let album = nowPlaying.album {
+    if let album = nowPlaying.album, !album.isEmpty {
       Text("💿 \(album)")
         .foregroundStyle(.tertiary)
         .frame(width: C.Menu.dropdownWidth, alignment: .leading)
