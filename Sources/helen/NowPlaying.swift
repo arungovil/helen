@@ -9,6 +9,9 @@ final class NowPlaying: ObservableObject {
   @Published var album: String?
   @Published var currentLine: String?
 
+  /// Nothing playing and no lyric to show.
+  var isIdle: Bool { currentLine == nil && title == C.Defaults.title }
+
   private let controller = MediaController()
   private let lyrics = LyricsService()
   private let log = Logger(subsystem: C.logSubsystem, category: "NowPlaying")
