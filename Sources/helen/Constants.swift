@@ -8,7 +8,6 @@ enum C {
     static let labelAlignment: Alignment = .leading
     static let dropdownWidth: CGFloat = 250
     static let iconSize: CGFloat = 18
-    static let repoURL = URL(string: "https://github.com/ArunGovil/helen")!
   }
 
   enum Lyrics {

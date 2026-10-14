@@ -52,11 +52,7 @@ private struct TrackMenu: View {
         .lineLimit(1)
     }
     Divider()
-    Link(destination: C.Menu.repoURL) {
-      Text("★ Star on GitHub")
-        .font(.caption2)
-        .frame(width: C.Menu.dropdownWidth, alignment: .leading)
-    }
-    .foregroundStyle(.secondary)
+    Button("Quit") { NSApplication.shared.terminate(nil) }
+      .keyboardShortcut("q")
   }
 }
