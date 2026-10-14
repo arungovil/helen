@@ -11,7 +11,7 @@ final class NowPlaying: ObservableObject {
 
   private let controller = MediaController()
   private let lyrics = LyricsService()
-  private let log = Logger(subsystem: "helen", category: "NowPlaying")
+  private let log = Logger(subsystem: C.logSubsystem, category: "NowPlaying")
   private var lastTrackId: String?
   private var duration: TimeInterval?
   private var syncedLines: [LyricLine] = []

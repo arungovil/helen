@@ -1,6 +1,8 @@
 import SwiftUI
 
 enum C {
+  static let logSubsystem = "helen"
+
   enum Menu {
     static let labelWidth: CGFloat = 200
     static let labelAlignment: Alignment = .leading

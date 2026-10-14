@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single timed lyric line parsed from LRC format.
-struct LyricLine: Sendable {
+struct LyricLine: Codable, Sendable {
   /// Time offset in seconds from the start of the track.
   let time: TimeInterval
   /// The lyric text at this timestamp.

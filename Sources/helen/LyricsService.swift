@@ -12,7 +12,8 @@ struct LRCLIBResponse: Decodable {
 struct LyricsService {
   private let session: URLSession
   private let decoder = JSONDecoder()
-  private let log = Logger(subsystem: "helen", category: "LyricsService")
+  private let log = Logger(subsystem: C.logSubsystem, category: "LyricsService")
+  private let cache = LyricsCache()
 
   init(session: URLSession? = nil) {
     let config = URLSessionConfiguration.default
@@ -21,11 +22,17 @@ struct LyricsService {
     self.session = session ?? URLSession(configuration: config)
   }
 
-  /// Tries the exact title with duration, then a cleaned title, then the exact title without
+  /// Returns the cached lines if present; otherwise tries the exact title with duration, then a cleaned title, then the exact title without
   /// duration. lrclib 404s on a duration mismatch, so the last attempt trades timing accuracy
   /// (it may return another edit of the song) for a hit.
   func fetchLyrics(artist: String, title: String, duration: TimeInterval?) async -> [LyricLine]? {
     let title = Self.stripRemaster(title)
+    let key = LyricsCache.key(artist: artist, title: title, duration: duration)
+    if let cached = await cache.lines(for: key) {
+      log.debug("Cache hit: \(key)")
+      return cached
+    }
+
     let cleaned = Self.cleanTitle(title)
     var attempts: [(title: String, duration: TimeInterval?)] = [(title, duration)]
     if cleaned != title { attempts.append((cleaned, duration)) }
@@ -36,6 +43,7 @@ struct LyricsService {
         if let lines = try await get(
           artist: artist, title: attempt.title, duration: attempt.duration)
         {
+          if !lines.isEmpty { await cache.store(lines, for: key) }
           return lines
         }
       }
